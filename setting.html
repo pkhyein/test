@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 자막 제어판</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #111;
+      color: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .panel {
+      background: #1d1d1d;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    label {
+      min-width: 120px;
+      font-weight: 600;
+    }
+    input[type="range"] {
+      width: 200px;
+    }
+    input[type="color"], select, input[type="file"] {
+      background: #222;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    button {
+      background: #0d6efd;
+      color: #fff;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    button.secondary {
+      background: #444;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .status {
+      font-size: 14px;
+      color: #7cf08c;
+    }
+    .preview {
+      background: #000;
+      padding: 12px;
+      border-radius: 8px;
+      min-height: 80px;
+      margin-top: 8px;
+    }
+    .logo-preview {
+      max-height: 80px;
+      max-width: 120px;
+      object-fit: contain;
+      background: #000;
+      padding: 6px;
+      border: 1px dashed #444;
+      border-radius: 8px;
+    }
+    small {
+      color: #999;
+    }
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      background: #181818;
+      color: #f4f4f4;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 14px;
+      line-height: 1.4;
+      resize: vertical;
+    }
+  </style>
+</head>
+<body>
+  <!-- DeepL API 전환 가이드:
+       아래 translateText 함수의 MYMEMORY_ENDPOINT 대신 DeepL API 호출로 교체하고,
+       const DEEPL_API_KEY = "여기에_키"; 주입 후 헤더/파라미터를 맞춰주세요. -->
+  <h1>실시간 자막 제어판</h1>
+
+  <div class="panel">
+    <div class="row">
+      <label for="inputLang">입력 언어</label>
+      <select id="inputLang">
+        <option value="en-US">영어 (en-US)</option>
+        <option value="ko-KR">한국어 (ko-KR)</option>
+        <option value="ja-JP">일본어 (ja-JP)</option>
+        <option value="zh-CN">중국어 (zh-CN)</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="outputLang">출력 언어</label>
+      <select id="outputLang">
+        <option value="KO">한국어</option>
+        <option value="EN">영어</option>
+        <option value="JA">일본어</option>
+        <option value="ZH">중국어</option>
+      </select>
+    </div>
+    <div class="row">
+      <button id="startBtn">🎙️ 인식 시작</button>
+      <button id="stopBtn" class="secondary" disabled>⏹️ 정지</button>
+      <span class="status" id="statusText">대기 중</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>전문 용어 사전 (Glossary)</h2>
+    <div class="row" style="align-items:flex-start">
+      <label for="glossaryInput" style="margin-top:6px">콤마(,)로 구분</label>
+      <textarea id="glossaryInput" placeholder="예) Generative AI, LLM, 컨퍼런스명, 스피커 이름"></textarea>
+    </div>
+    <small>입력한 용어는 번역 컨텍스트에 반영되고, 번역 결과도 이 용어로 강제 보정됩니다.</small>
+  </div>
+
+  <div class="panel">
+    <h2>디자인 설정</h2>
+    <div class="row">
+      <label for="origSize">원문 글자 크기</label>
+      <input type="range" id="origSize" min="20" max="120" value="64">
+      <span id="origSizeVal">64px</span>
+    </div>
+    <div class="row">
+      <label for="origColor">원문 글자 색</label>
+      <input type="color" id="origColor" value="#ffffff">
+    </div>
+    <div class="row">
+      <label for="origFont">원문 폰트</label>
+      <select id="origFont">
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+        <option value="'Roboto', sans-serif">Roboto</option>
+        <option value="'Pretendard', sans-serif">Pretendard</option>
+        <option value="'Nanum Gothic', sans-serif">Nanum Gothic</option>
+        <option value="'Inter', sans-serif">Inter</option>
+      </select>
+    </div>
+    <hr>
+    <div class="row">
+      <label for="transSize">번역 글자 크기</label>
+      <input type="range" id="transSize" min="20" max="120" value="68">
+      <span id="transSizeVal">68px</span>
+    </div>
+    <div class="row">
+      <label for="transColor">번역 글자 색</label>
+      <input type="color" id="transColor" value="#ffd166">
+    </div>
+    <div class="row">
+      <label for="transFont">번역 폰트</label>
+      <select id="transFont">
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+        <option value="'Roboto', sans-serif">Roboto</option>
+        <option value="'Pretendard', sans-serif">Pretendard</option>
+        <option value="'Nanum Gothic', sans-serif">Nanum Gothic</option>
+        <option value="'Inter', sans-serif">Inter</option>
+      </select>
+    </div>
+    <hr>
+    <div class="row">
+      <label for="paddingControl">상하 여백</label>
+      <input type="range" id="paddingControl" min="0" max="120" value="24">
+      <span id="paddingVal">24px</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>로고 업로드</h2>
+    <div class="row">
+      <input type="file" id="logoInput" accept="image/*">
+      <small>우측 상단에 표시됩니다.</small>
+    </div>
+    <div class="preview">
+      <img id="logoPreview" class="logo-preview" alt="로고 미리보기">
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>실시간 미리보기</h2>
+    <div class="preview" id="originalPreview">원문이 여기에 표시됩니다...</div>
+    <div class="preview" id="translatedPreview">번역문이 여기에 표시됩니다...</div>
+  </div>
+
+  <script>
+    const LS_CONFIG_KEY = "subtitle-config";
+    const LS_PAYLOAD_KEY = "subtitle-payload";
+    const DEBOUNCE_MS = 500;
+    const statusText = document.getElementById("statusText");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const originalPreview = document.getElementById("originalPreview");
+    const translatedPreview = document.getElementById("translatedPreview");
+    const logoPreview = document.getElementById("logoPreview");
+    const fields = {
+      inputLang: document.getElementById("inputLang"),
+      outputLang: document.getElementById("outputLang"),
+      glossaryInput: document.getElementById("glossaryInput"),
+      origSize: document.getElementById("origSize"),
+      origColor: document.getElementById("origColor"),
+      origFont: document.getElementById("origFont"),
+      transSize: document.getElementById("transSize"),
+      transColor: document.getElementById("transColor"),
+      transFont: document.getElementById("transFont"),
+      paddingControl: document.getElementById("paddingControl"),
+      logoInput: document.getElementById("logoInput"),
+      origSizeVal: document.getElementById("origSizeVal"),
+      transSizeVal: document.getElementById("transSizeVal"),
+      paddingVal: document.getElementById("paddingVal"),
+    };
+
+    let recognition = null;
+    let debounceTimer = null;
+    let isRecognizing = false;
+
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem(LS_CONFIG_KEY);
+        if (!raw) return;
+        const cfg = JSON.parse(raw);
+        Object.entries(cfg).forEach(([key, value]) => {
+          if (fields[key]) {
+            fields[key].value = value;
+            if (key === "origSize") fields.origSizeVal.textContent = value + "px";
+            if (key === "transSize") fields.transSizeVal.textContent = value + "px";
+            if (key === "paddingControl") fields.paddingVal.textContent = value + "px";
+          }
+        });
+        if (cfg.logoDataUrl) {
+          logoPreview.src = cfg.logoDataUrl;
+        }
+      } catch (e) {
+        console.error("설정 불러오기 오류", e);
+      }
+    }
+
+    function saveConfig(extra = {}) {
+      const config = {
+        inputLang: fields.inputLang.value,
+        outputLang: fields.outputLang.value,
+        glossaryInput: fields.glossaryInput.value || "",
+        origSize: fields.origSize.value,
+        origColor: fields.origColor.value,
+        origFont: fields.origFont.value,
+        transSize: fields.transSize.value,
+        transColor: fields.transColor.value,
+        transFont: fields.transFont.value,
+        paddingControl: fields.paddingControl.value,
+        logoDataUrl: logoPreview.src || "",
+        ...extra,
+      };
+      localStorage.setItem(LS_CONFIG_KEY, JSON.stringify(config));
+    }
+
+    function updatePayload(original, translated, isFinal = false) {
+      const payload = {
+        original: original ?? originalPreview.textContent,
+        translated: translated ?? translatedPreview.textContent,
+        isFinal,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(LS_PAYLOAD_KEY, JSON.stringify(payload));
+      if (original !== undefined) originalPreview.textContent = original;
+      if (translated !== undefined) translatedPreview.textContent = translated;
+    }
+
+    function debounceTranslate(text) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => translateAndUpdate(text), DEBOUNCE_MS);
+    }
+
+    async function translateAndUpdate(text) {
+      if (!text) return;
+      try {
+        const resText = await translateText(text, fields.outputLang.value);
+        const postProcessed = applyGlossary(resText);
+        updatePayload(undefined, postProcessed);
+      } catch (e) {
+        console.error("번역 실패", e);
+        statusText.textContent = "번역 오류: " + e.message;
+      }
+    }
+
+    function getGlossaryTerms() {
+      return (fields.glossaryInput.value || "")
+        .split(",")
+        .map(t => t.trim())
+        .filter(Boolean);
+    }
+
+    function buildContextPrompt() {
+      const terms = getGlossaryTerms();
+      if (!terms.length) return "";
+      return `너는 전문 컨퍼런스 통역사야. 아래의 전문 용어 리스트를 참고해서, 인식된 음성을 문맥에 맞게 번역해줘. [${terms.join(", ")}]`;
+    }
+
+    function applyGlossary(translatedText) {
+      if (!translatedText) return translatedText;
+      const terms = getGlossaryTerms();
+      if (!terms.length) return translatedText;
+      let output = translatedText;
+      terms.forEach(term => {
+        if (!term) return;
+        const safe = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(safe, "gi");
+        output = output.replace(regex, term);
+      });
+      return output;
+    }
+
+    async function translateText(text, targetLang) {
+      // 기본 무료 API: MyMemory
+      const context = buildContextPrompt();
+      const combined = context ? `${text}\nContext:${context}` : text;
+      const encoded = encodeURIComponent(combined);
+      const langPair = encodeURIComponent(fields.inputLang.value.split("-")[0] + "|" + targetLang.toLowerCase());
+      const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${langPair}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data?.responseData?.translatedText) {
+        return data.responseData.translatedText;
+      }
+      throw new Error("번역 응답이 비어 있습니다.");
+    }
+
+    function initRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("이 브라우저는 Web Speech API를 지원하지 않습니다. 크롬을 사용하세요.");
+        return null;
+      }
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = fields.inputLang.value;
+      rec.onstart = () => {
+        isRecognizing = true;
+        statusText.textContent = "듣는 중...";
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+      };
+      rec.onerror = (e) => {
+        console.error("인식 오류", e);
+        statusText.textContent = "오류: " + (e.error || "unknown");
+      };
+      rec.onend = () => {
+        isRecognizing = false;
+        statusText.textContent = "중지됨";
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      };
+      rec.onresult = (event) => {
+        let interim = "";
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+        const combined = (finalTranscript || "") + (interim ? " " + interim : "");
+        updatePayload(combined, undefined, !!finalTranscript);
+        debounceTranslate(combined);
+      };
+      return rec;
+    }
+
+    function startRecognition() {
+      if (isRecognizing) return;
+      if (!recognition) recognition = initRecognition();
+      if (recognition) {
+        recognition.lang = fields.inputLang.value;
+        recognition.start();
+      }
+    }
+
+    function stopRecognition() {
+      if (recognition && isRecognizing) {
+        recognition.stop();
+      }
+    }
+
+    function bindControls() {
+      [
+        "inputLang","outputLang","origColor","origFont",
+        "transColor","transFont","glossaryInput"
+      ].forEach(id => {
+        fields[id].addEventListener("change", () => {
+          saveConfig();
+          updatePayload(); // 스타일만 바뀌어도 display가 storage 이벤트로 반응
+        });
+      });
+
+      [["origSize","origSizeVal"], ["transSize","transSizeVal"], ["paddingControl","paddingVal"]]
+        .forEach(([rangeId, labelId]) => {
+          fields[rangeId].addEventListener("input", () => {
+            fields[labelId].textContent = fields[rangeId].value + "px";
+            saveConfig();
+            updatePayload();
+          });
+        });
+
+      fields.logoInput.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          logoPreview.src = reader.result;
+          saveConfig();
+          updatePayload();
+        };
+        reader.readAsDataURL(file);
+      });
+
+      startBtn.addEventListener("click", startRecognition);
+      stopBtn.addEventListener("click", stopRecognition);
+    }
+
+    function init() {
+      loadConfig();
+      bindControls();
+      saveConfig();
+      updatePayload("원문이 여기에 표시됩니다...", "번역문이 여기에 표시됩니다...", false);
+    }
+
+    init();
+  </script>
+</body>
+</html>
